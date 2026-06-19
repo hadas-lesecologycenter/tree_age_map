@@ -36,7 +36,9 @@ h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var
 <div id="srcbadge" class="panel">Source: ForMS (hn5i-inap) <span id="srcloading" style="color:#c9a227">loading…</span></div>
 <div id="controls" class="panel">
 <h1>NYC Street-Tree Age</h1><p class="sub">all trees (streets + parks) · by neighborhood · darker = older</p>
-<p class="lbl">Color shows</p>
+<p class="lbl">Trees shown</p>
+<div class="seg" id="modeSeg"><button data-m="all" class="on">All trees</button><button data-m="street">Street only</button></div>
+<p class="lbl" style="margin-top:13px">Color shows</p>
 <div class="seg" id="seg"><button data-k="median_age" class="on">Median age</button><button data-k="pct_mature">% mature</button><button data-k="pct_old">% old</button></div>
 <p class="lbl" style="margin-top:13px">Legend</p>
 <div id="legend"></div><div class="ticks"><span id="lo">-</span><span id="hi">-</span></div>
@@ -56,13 +58,14 @@ h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var
 var DATA=null;
 var CURVES={"american beech": [0.3333, 0.0, 24.9], "american elm": [0.44493, -0.008487, 32.0], "american hornbeam": [0.35, 0.0, 3.0], "american linden": [0.50974, -0.010216, 26.0], "amur maple": [0.41262, -0.011509, 9.4], "black cherry": [0.06, 0.0, 30.4], "black locust": [0.3237, 0.0, 28.8], "black walnut": [0.3, 0.0, 8.8], "boxelder": [0.3, 0.0, 18.9], "bur oak": [0.1, 0.0, 3.0], "callery pear": [0.41473, -0.012165, 13.0], "catalpa": [0.2016, 0.0, 29.8], "chinese elm": [0.3634, 0.0, 20.0], "dawn redwood": [0.6051, 0.0, 12.1], "eastern cottonwood": [0.4667, 0.0, 21.9], "eastern redbud": [0.4231, 0.0, 7.3], "eastern redcedar": [0.1875, 0.0, 25.3], "english oak": [0.4563, 0.0, 18.0], "european hornbeam": [0.364, 0.0, 9.4], "flowering dogwood": [0.1288, 0.0, 13.0], "ginkgo": [0.32454, -0.007514, 18.0], "green ash": [0.44038, -0.006849, 18.0], "hardy rubber tree": [0.2, 0.0, 3.0], "hedge maple": [0.37707, -0.008966, 8.0], "honeylocust": [0.51618, -0.017586, 16.0], "japanese maple": [0.30109, -0.010833, 15.0], "japanese snowbell": [0.1, 0.0, 3.0], "japanese tree lilac": [0.2277, 0.0, 5.0], "japanese zelkova": [0.51426, -0.010941, 16.0], "katsura tree": [0.4, 0.0, 8.1], "kentucky coffeetree": [0.4163, 0.0, 7.0], "kousa dogwood": [0.15, 0.0, 4.8], "littleleaf linden": [0.41853, -0.010391, 21.0], "london planetree": [0.36235, -0.008857, 34.0], "mimosa": [0.1, 0.0, 8.0], "mulberry": [0.31, 0.0, 31.6], "northern red oak": [0.46842, -0.007379, 32.0], "norway maple": [0.30121, -0.00953, 23.0], "norway spruce": [0.1857, 0.0, 24.5], "paper birch": [0.1, 0.0, 7.0], "pin oak": [0.49425, -0.008466, 31.0], "red maple": [0.3851, -0.011187, 23.0], "river birch": [0.6, 0.0, 7.8], "sassafras": [0.04, 0.0, 24.0], "sawtooth oak": [0.4141, 0.0, 10.0], "scarlet oak": [0.9, 0.0, 2.0], "shingle oak": [0.7, 0.0, 2.0], "siberian elm": [0.2333, 0.0, 34.2], "silver linden": [0.56838, -0.008719, 13.0], "silver maple": [0.42664, -0.007911, 35.0], "sugar maple": [0.2245, 0.0, 18.7], "swamp white oak": [0.4955, 0.0, 11.8], "sweetgum": [0.44571, -0.012513, 24.0], "sycamore maple": [0.21794, -0.007094, 19.1], "tree of heaven": [0.4611, 0.0, 24.1], "weeping willow": [0.1, 0.0, 9.0], "white ash": [0.4267, 0.0, 26.6], "white oak": [0.3754, 0.0, 33.8], "willow oak": [0.41408, -0.003271, 27.0], "__overall__": [0.4171, -0.01023, 30.0]}
 ;
-var BASE='https://data.cityofnewyork.us',ID='hn5i-inap',SODA=BASE+'/resource/'+ID+'.json';
+var BASE='https://data.cityofnewyork.us',ID='hn5i-inap',SODA=BASE+'/resource/'+ID+'.json',SPACES=BASE+'/resource/82zj-84is.json';
 var APP_TOKEN='';   // <-- paste a free NYC Open Data app token here for the full pull (avoids throttling)
 var NOWYEAR=new Date().getFullYear();
 var map=L.map('map').setView([40.715,-73.93],11);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
 var RAMP=['#eef6e3','#cfe8a8','#a9d66a','#79bb42','#4f8f33','#2D5F2B'];
 var state={metric:'median_age'},breaks=[],layer;
+var treeMode='all',ALL_BINS=null,STREET_BINS=null;
 var META={median_age:{u:' yr',lab:'Median age'},pct_mature:{u:'%',lab:'% mature (≥30 yr)'},pct_old:{u:'%',lab:'% old (≥60 yr)'}};
 /* ---------- age model (mirrors the Python pipeline) ---------- */
 var CAL=2.0,GF=0.05,GC=1.0,MAXAGE=150,SPCAP={'callery pear':80,'cherry':80,'japanese tree lilac':70};
@@ -78,8 +81,9 @@ function spar(p){return (p.n||0)<30||p[state.metric]==null;}
 function style(f){var p=f.properties;return {weight:p.cb3?2.2:.5,color:p.cb3?'#c9a227':'#fff',fillColor:spar(p)?'#c9ccc6':col(p[state.metric]),fillOpacity:spar(p)?.4:.82};}
 function read(p){var m=META[state.metric];var v=p[state.metric];var show=v==null?'—':(state.metric==='median_age'?v+' yrs':v+'%');
  document.getElementById('rname').textContent=p.NTAName+(p.cb3?'  ★ CB3':'');
+ var treeLabel=treeMode==='street'?'street trees':'trees';
  document.getElementById('rbody').innerHTML='<div class=rr><span>'+m.lab+'</span><span>'+show+'</span></div>'+
-  '<div class=rr><span>trees</span><span>'+(p.n||0).toLocaleString()+'</span></div>'+
+  '<div class=rr><span>'+treeLabel+'</span><span>'+(p.n||0).toLocaleString()+'</span></div>'+
   (p.median_age!=null?'<div class=rr><span>median age</span><span>'+p.median_age+' yrs</span></div>':'');}
 function draw(){if(layer)layer.remove();breaks=qbreaks();
  layer=L.geoJSON(DATA,{style:style,onEachFeature:function(f,l){l.on('mouseover',function(){l.setStyle({weight:2.4,color:'#2D5F2B'});read(f.properties);});
@@ -87,6 +91,18 @@ function draw(){if(layer)layer.remove();breaks=qbreaks();
  var m=META[state.metric];document.getElementById('lo').textContent=Math.round(breaks[0])+m.u;document.getElementById('hi').textContent=Math.round(breaks[5])+m.u+'+';
  var lg=document.getElementById('legend');lg.innerHTML='';RAMP.forEach(function(c){var s=document.createElement('span');s.style.background=c;lg.appendChild(s);});}
 document.querySelectorAll('#seg button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#seg button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');state.metric=b.dataset.k;draw();};});
+function applyBins(bins){
+ DATA.features.forEach(function(f,i){var a=bins[i];if(!a||!a.length){f.properties.n=0;f.properties.median_age=null;f.properties.pct_mature=null;f.properties.pct_old=null;return;}
+  a.sort(function(x,y){return x-y;});var med=a[Math.floor(a.length/2)],mat=0,old=0;
+  for(var j=0;j<a.length;j++){if(a[j]>=30)mat++;if(a[j]>=60)old++;}
+  f.properties.n=a.length;f.properties.median_age=Math.round(med*10)/10;
+  f.properties.pct_mature=Math.round(mat/a.length*1000)/10;f.properties.pct_old=Math.round(old/a.length*1000)/10;});
+ draw();}
+document.querySelectorAll('#modeSeg button').forEach(function(b){b.onclick=function(){
+ if(!ALL_BINS||!STREET_BINS)return;
+ document.querySelectorAll('#modeSeg button').forEach(function(x){x.classList.remove('on');});
+ b.classList.add('on');treeMode=b.dataset.m;
+ applyBins(treeMode==='street'?STREET_BINS:ALL_BINS);};});
 /* ---------- point-in-polygon ---------- */
 function inRing(x,y,r){var i,j,c=false;for(i=0,j=r.length-1;i<r.length;j=i++){var xi=r[i][0],yi=r[i][1],xj=r[j][0],yj=r[j][1];if(((yi>y)!=(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;}
 function inFeature(x,y,f){var g=f.geometry,P=g.type==='Polygon'?[g.coordinates]:g.coordinates;for(var p=0;p<P.length;p++){if(inRing(x,y,P[p][0])){var hole=false;for(var h=1;h<P[p].length;h++)if(inRing(x,y,P[p][h])){hole=true;break;}if(!hole)return true;}}return false;}
@@ -103,34 +119,52 @@ async function discover(){
  return {geo:geo,date:date};}
 function coords(row,F){var v=row[F.geo];try{if(v&&v.coordinates)return v.coordinates;if(typeof v==='string'){if(v.charAt(0)==='{')return JSON.parse(v).coordinates;var m=v.match(/POINT\s*\(([-\d.]+)\s+([-\d.]+)\)/i);if(m)return[parseFloat(m[1]),parseFloat(m[2])];}}catch(e){}return null;}
 liveBtn.onclick=async function(){
- liveBtn.disabled=true;liveStat.textContent='Checking access…';
- var bins=DATA.features.map(function(){return [];});
+ liveBtn.disabled=true;liveStat.textContent='Phase 1: loading street planting spaces…';
+ var allBins=DATA.features.map(function(){return [];});
+ var streetBins=DATA.features.map(function(){return [];});
  try{
+   // Phase 1: collect street planting space IDs
+   var streetIds=new Set(),psidSpField=null;
+   try{
+     var sp0=await fetchJSON(tok(SPACES+'?$limit=1'),15000);
+     if(sp0&&sp0[0]){var sk=Object.keys(sp0[0]);psidSpField=['globalid','global_id','globalID'].find(function(k){return sk.includes(k);})||null;}
+     if(psidSpField){var spOff=0,spPage=50000;
+       while(true){var spRows=await fetchRetry(tok(SPACES+'?$select='+psidSpField+'&$where='+encodeURIComponent("tptype='Street'")+'&$order=:id&$limit='+spPage+'&$offset='+spOff),3);
+         if(!spRows||!spRows.length)break;
+         spRows.forEach(function(r){if(r[psidSpField])streetIds.add(String(r[psidSpField]).toLowerCase());});
+         spOff+=spPage;liveStat.textContent='Phase 1: '+streetIds.size.toLocaleString()+' street spaces…';
+         if(spRows.length<spPage)break;}}
+   }catch(e){}
+   // Phase 2: fetch trees, tag street vs all
    var F=await discover();
-   var sel=F.geo+',dbh,genusspecies'+(F.date?','+F.date:'');
+   var psidTreeField=null;
+   if(psidSpField&&streetIds.size){
+     try{var t0=await fetchJSON(tok(SODA+'?$limit=1'),15000);
+       if(t0&&t0[0]){var tk=Object.keys(t0[0]);psidTreeField=['psid','ps_id','plantingspaceid'].find(function(k){return tk.includes(k);})||null;}}catch(e){}
+   }
+   var sel=F.geo+',dbh,genusspecies'+(F.date?','+F.date:'')+(psidTreeField?','+psidTreeField:'');
    var where=encodeURIComponent("dbh > 0 AND dbh <= 60 AND tpstructure != 'Retired'");
-   var total=0,placed=0,offset=0,PAGE=50000,cap=1000000;
-   liveStat.textContent='Connected'+(F.date?' (planting dates available)':'')+'. Loading all trees…';
+   var total=0,allPlaced=0,streetPlaced=0,offset=0,PAGE=50000,cap=1000000;
+   liveStat.textContent='Phase 2: loading all trees…';
    while(offset<cap){
      var url=SODA+'?$select='+sel+'&$where='+where+'&$order=:id&$limit='+PAGE+'&$offset='+offset;
      var rows=await fetchRetry(url,3);
      if(!rows||!rows.length)break;
      for(var i=0;i<rows.length;i++){var row=rows[i];var c=coords(row,F);if(!c||isNaN(c[0])||isNaN(c[1]))continue;total++;
        var age=treeAge(parseFloat(row.dbh),row.genusspecies,F.date?row[F.date]:null);
-       var idx=ntaIndexFor(c[0],c[1]);if(idx>-1){bins[idx].push(age);placed++;}}
+       var idx=ntaIndexFor(c[0],c[1]);
+       if(idx>-1){allBins[idx].push(age);allPlaced++;
+         var isSt=!streetIds.size||!psidTreeField;
+         if(!isSt){var psid=row[psidTreeField];isSt=!!(psid&&streetIds.has(String(psid).toLowerCase()));}
+         if(isSt){streetBins[idx].push(age);streetPlaced++;}}}
      offset+=PAGE;liveStat.textContent='Loaded '+total.toLocaleString()+' trees…';
-     if(rows.length<PAGE)break;
-   }
-   // recompute per-neighborhood stats from live ages
-   DATA.features.forEach(function(f,i){var a=bins[i];if(!a.length){f.properties.n=0;f.properties.median_age=null;f.properties.pct_mature=null;f.properties.pct_old=null;return;}
-     a.sort(function(x,y){return x-y;});var med=a[Math.floor(a.length/2)];
-     var mat=0,old=0;for(var j=0;j<a.length;j++){if(a[j]>=30)mat++;if(a[j]>=60)old++;}
-     f.properties.n=a.length;f.properties.median_age=Math.round(med*10)/10;
-     f.properties.pct_mature=Math.round(mat/a.length*1000)/10;f.properties.pct_old=Math.round(old/a.length*1000)/10;});
-   draw();
-   document.getElementById('srcbadge').innerHTML='Source: ForMS (hn5i-inap) · <b style="color:#2D5F2B">'+placed.toLocaleString()+'</b> trees ('+NOWYEAR+')';
-   document.querySelector('.sub').textContent='by neighborhood · live current inventory · darker = older';
-   liveStat.innerHTML='<b style="color:#2D5F2B">'+placed.toLocaleString()+'</b> living trees mapped. Neighborhoods now reflect the current inventory'+(F.date?', using recorded planting dates where present.':'.');
+     if(rows.length<PAGE)break;}
+   var hasFilter=!!(streetIds.size&&psidTreeField);
+   ALL_BINS=allBins;STREET_BINS=hasFilter?streetBins:allBins;
+   applyBins(treeMode==='street'?STREET_BINS:ALL_BINS);
+   if(!hasFilter){document.querySelectorAll('#modeSeg button').forEach(function(b){b.disabled=true;b.title='Street filter unavailable';});}
+   document.getElementById('srcbadge').innerHTML='Source: ForMS (hn5i-inap) · <b style="color:#2D5F2B">'+allPlaced.toLocaleString()+'</b> trees ('+NOWYEAR+')';
+   liveStat.innerHTML='<b style="color:#2D5F2B">'+streetPlaced.toLocaleString()+'</b> street / <b style="color:#2D5F2B">'+allPlaced.toLocaleString()+'</b> total trees mapped'+(F.date?', with recorded planting dates.':'.');
    liveBtn.textContent='✓ Live inventory loaded';
  }catch(e){
    draw();liveBtn.disabled=false;liveBtn.textContent='● Retry live load';

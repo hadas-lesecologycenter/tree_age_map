@@ -31,20 +31,20 @@ h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var
 #srcbadge{position:absolute;top:14px;right:14px;z-index:1000;padding:6px 11px;font:500 11px 'Lexend';color:#5a6a58}
 </style></head><body>
 <div id="map"></div>
-<div id="srcbadge" class="panel">CB3 · street trees · <span id="srcloading" style="color:#c9a227">loading…</span></div>
+<div id="srcbadge" class="panel">CB3 · <span id="srcmode">street trees</span> · <span id="srcloading" style="color:#c9a227">loading…</span></div>
 <div id="controls" class="panel">
 <h1>CB3 Street-Tree Age</h1>
 <p class="sub">census tract granularity · LES / East Village</p>
-<p class="lbl">Color shows</p>
+<p class="lbl">Trees shown</p>
+<div class="seg" id="modeSeg">
+  <button data-m="street" class="on">Street only</button>
+  <button data-m="all">All trees</button>
+</div>
+<p class="lbl" style="margin-top:13px">Color shows</p>
 <div class="seg" id="seg">
   <button data-k="median_age" class="on">Median age</button>
   <button data-k="pct_mature">% mature</button>
   <button data-k="pct_old">% old</button>
-</div>
-<p class="lbl" style="margin-top:13px">Trees shown</p>
-<div class="seg" id="modeSeg">
-  <button data-m="street" class="on">Street only</button>
-  <button data-m="all">All trees</button>
 </div>
 <p class="lbl" style="margin-top:13px">Legend</p>
 <div id="legend"></div>
@@ -53,8 +53,8 @@ h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var
 <div id="liveStat">Loading census tract boundaries…</div>
 <p class="note">Community Board 3 (Lower East Side / East Village). 2020 census tract boundaries (63ge-mke6). Street trees from ForMS (hn5i-inap), filtered via Forestry Planting Spaces (82zj-84is) to "Street" type sites. Ages estimated via NYC species growth curves and recorded planting dates.</p>
 <div class="navlinks">
-  <a href="street-trees.html">← NYC street trees (NTA level)</a>
-  <a href="index.html">← All NYC neighborhoods</a>
+  <a href="index.html">← All trees citywide (NTA map)</a>
+  <a href="street-trees.html">← Street trees citywide (NTA map)</a>
 </div>
 </div>
 <div id="read" class="panel"><b id="rname">Hover a census tract</b><div id="rbody"></div></div>
@@ -144,6 +144,7 @@ document.querySelectorAll('#modeSeg button').forEach(function(b){b.onclick=funct
   if(!ALL_BINS||!STREET_BINS)return;
   document.querySelectorAll('#modeSeg button').forEach(function(x){x.classList.remove('on');});
   b.classList.add('on');treeMode=b.dataset.m;
+  document.getElementById('srcmode').textContent=treeMode==='street'?'street trees':'all trees';
   applyBins(treeMode==='street'?STREET_BINS:ALL_BINS);
 };});
 

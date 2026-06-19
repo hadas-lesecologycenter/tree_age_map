@@ -25,6 +25,8 @@ h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var
 #liveBtn:disabled{opacity:.6;cursor:default}
 #liveStat{font-size:10.5px;color:#5a6a58;margin-top:7px;line-height:1.45}#liveStat a{color:#2D5F2B}
 .note{font-size:10px;line-height:1.45;color:#6b7869;border-top:1px dashed var(--sage);padding-top:9px;margin-top:11px}
+.navlinks{border-top:1px dashed var(--sage);padding-top:9px;margin-top:9px;display:flex;flex-direction:column;gap:4px}
+.navlinks a{font-size:10px;color:var(--forest);text-decoration:none}.navlinks a:hover{text-decoration:underline}
 #read{position:absolute;bottom:14px;left:14px;z-index:1000;padding:11px 13px;width:240px}
 #read b{font-family:'Poppins';color:var(--forest)}.rr{display:flex;justify-content:space-between;font-size:12px;margin:2px 0}
 .rr span:last-child{font-variant-numeric:tabular-nums;font-weight:500}
@@ -43,6 +45,10 @@ h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var
 <button id="liveBtn">● Load all trees (live, current)</button>
 <div id="liveStat"></div>
 <p class="note">Ages estimated from trunk size via NYC species growth curves (capped 150 yr) and recorded planting dates where present — relative, not exact. The live pull reads every living Forestry Tree Point from NYC Open Data <b>in your browser</b>; works from a downloaded file or GitHub Pages, not an embedded preview. A free app token (top of file) is recommended for the full pull.</p>
+<div class="navlinks">
+  <a href="cb3-street-trees.html">→ CB3 detail map (census tracts)</a>
+  <a href="street-trees.html">→ Street trees citywide (NTA map)</a>
+</div>
 </div>
 <div id="read" class="panel"><b id="rname">Hover a neighborhood</b><div id="rbody"></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>

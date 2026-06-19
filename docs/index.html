@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>NYC Street-Tree Age (live, all trees)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#2D5F2B;--lime:#8CC63F;--sage:#A9BFA0;--cream:#F6F4EC;--ink:#1c2a1b;--grey:#c9ccc6}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:'Lexend',sans-serif;color:var(--ink)}
+#map{position:absolute;inset:0;background:var(--cream)}
+.panel{position:absolute;z-index:1000;background:rgba(255,255,255,.97);border:1px solid var(--sage);border-radius:14px;box-shadow:0 6px 24px rgba(45,95,43,.14)}
+#controls{top:14px;left:14px;width:258px;padding:16px}
+h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var(--forest)}
+.sub{font-size:11px;color:#5a6a58;margin:0 0 13px}
+.lbl{font-family:'Poppins';font-weight:600;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--forest);margin:0 0 6px}
+.seg{display:flex;border:1px solid var(--sage);border-radius:9px;overflow:hidden}
+.seg button{flex:1;border:0;background:#fff;padding:7px 3px;font:500 10.5px 'Lexend';color:#46544a;cursor:pointer}
+.seg button.on{background:var(--forest);color:#fff}.seg button+button{border-left:1px solid var(--sage)}
+#legend{display:flex;gap:3px;margin-top:4px}#legend span{flex:1;height:12px;border-radius:2px}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:#5a6a58;margin-top:3px}
+.swatch{display:flex;align-items:center;gap:7px;font-size:11px;color:#5a6a58;margin-top:7px}
+.swatch i{width:12px;height:12px;border-radius:3px;background:var(--grey);border:1px solid #b4b8b0}
+.cb3key i{background:transparent;border:2px solid #c9a227}
+#info{bottom:14px;right:14px;padding:10px 13px;font-size:11px;color:#4a5a48;max-width:220px;line-height:1.5}
+#info a{color:var(--forest)}
+#status{position:absolute;bottom:14px;left:14px;z-index:1000;font-size:10.5px;
+  background:rgba(255,255,255,.92);padding:5px 9px;border-radius:8px;color:#5a6a58;
+  border:1px solid var(--sage)}
+.leaflet-popup-content{font-family:'Lexend';font-size:12px;margin:10px 13px}
+.leaflet-popup-content b{font-family:'Poppins';color:var(--forest)}
+.pp-row{display:flex;justify-content:space-between;gap:16px;margin:2px 0}
+.pp-row span:last-child{font-variant-numeric:tabular-nums;font-weight:500}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="controls" class="panel">
+  <h1>NYC Street-Tree Age</h1>
+  <p class="sub">Individual trees · dot = one tree · color = estimated age</p>
+
+  <p class="lbl">Color scale</p>
+  <div id="legend"></div>
+  <div class="ticks"><span>0 yr</span><span>30 yr</span><span>60 yr</span><span>90+ yr</span></div>
+
+  <p class="lbl" style="margin-top:11px">Overlays</p>
+  <div class="seg" id="seg-over">
+    <button data-v="none" class="on">None</button>
+    <button data-v="cb3">CB3</button>
+    <button data-v="escr">ESCR</button>
+  </div>
+
+  <div class="swatch cb3key" id="cb3-swatch" style="display:none;margin-top:9px">
+    <i></i><span>Community Board 3</span>
+  </div>
+  <div class="swatch" id="escr-swatch" style="display:none;margin-top:9px">
+    <i style="background:#c9a227;border-color:#c9a227"></i><span>ESCR boundary</span>
+  </div>
+
+  <p class="lbl" style="margin-top:11px">Zoom preset</p>
+  <div class="seg" id="seg-zoom">
+    <button data-v="nyc" class="on">All NYC</button>
+    <button data-v="escr">ESCR area</button>
+  </div>
+</div>
+
+<div id="info" class="panel">
+  Age estimated from trunk diameter via NYC growth curves
+  (Mailloux&nbsp;et&nbsp;al.&nbsp;2024) + recorded planting dates —
+  a relative ranking, not exact ages.
+  <br><a href="tract-map.html">View by census tract →</a>
+</div>
+
+<div id="status">Loading…</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const map = L.map('map',{zoomControl:true}).setView([40.72,-73.96],12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+
+// ── age colour ramp (0-90+ yr) ──────────────────────────────────────────────
+const STOPS=[
+  [0,  '#eef6e3'],
+  [10, '#cfe8a8'],
+  [20, '#a9d66a'],
+  [30, '#79bb42'],
+  [45, '#4f8f33'],
+  [60, '#2D5F2B'],
+  [80, '#1a3a19'],
+];
+function ageColor(yr){
+  if(yr==null||isNaN(yr)) return '#c9ccc6';
+  for(let i=STOPS.length-1;i>=0;i--) if(yr>=STOPS[i][0]) return STOPS[i][1];
+  return STOPS[0][1];
+}
+
+// legend swatches
+(function buildLegend(){
+  const el=document.getElementById('legend');
+  STOPS.forEach(([,c])=>{
+    const s=document.createElement('span');
+    s.style.background=c; el.appendChild(s);
+  });
+})();
+
+// ── overlay layers ───────────────────────────────────────────────────────────
+let cb3Layer=null, escrLayer=null, treeLayer=null;
+const OVERLAY_URLS={
+  cb3: 'https://data.cityofnewyork.us/resource/jp9i-3b7y.geojson?$where=boro_cd=103&$limit=5000',
+  escr: 'escr_boundary.geojson',
+};
+
+async function fetchOverlay(key){
+  const r=await fetch(OVERLAY_URLS[key]); return r.ok?r.json():null;
+}
+
+let activeOverlay='none';
+document.querySelectorAll('#seg-over button').forEach(b=>{
+  b.onclick=async ()=>{
+    document.querySelectorAll('#seg-over button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    const v=b.dataset.v;
+    // remove old overlays
+    if(cb3Layer){cb3Layer.remove();cb3Layer=null;}
+    if(escrLayer){escrLayer.remove();escrLayer=null;}
+    document.getElementById('cb3-swatch').style.display='none';
+    document.getElementById('escr-swatch').style.display='none';
+    activeOverlay=v;
+    if(v==='cb3'){
+      const gj=await fetchOverlay('cb3');
+      if(gj){cb3Layer=L.geoJSON(gj,{style:{color:'#c9a227',weight:2,fill:false}}).addTo(map);}
+      document.getElementById('cb3-swatch').style.display='flex';
+    } else if(v==='escr'){
+      const gj=await fetchOverlay('escr');
+      if(gj){escrLayer=L.geoJSON(gj,{style:{color:'#c9a227',weight:2.5,fill:false}}).addTo(map);}
+      document.getElementById('escr-swatch').style.display='flex';
+    }
+  };
+});
+
+// ── zoom presets ─────────────────────────────────────────────────────────────
+const VIEWS={
+  nyc:  [[40.496,-74.259],[40.915,-73.700]],
+  escr: [[40.710,-73.995],[40.730,-73.970]],
+};
+document.querySelectorAll('#seg-zoom button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#seg-zoom button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    map.fitBounds(VIEWS[b.dataset.v]);
+  };
+});
+
+// ── tree data (GeoJSON points) ───────────────────────────────────────────────
+// Expected: FeatureCollection of Points, each with properties:
+//   age_est (number, years), spc_common, tree_id, status, etc.
+function loadTrees(gj){
+  if(treeLayer){treeLayer.remove();}
+  treeLayer=L.geoJSON(gj,{
+    pointToLayer:(f,ll)=>L.circleMarker(ll,{
+      radius:3.5,
+      fillColor:ageColor(f.properties.age_est),
+      color:'#fff',weight:.4,fillOpacity:.85,
+    }),
+    onEachFeature:(f,l)=>{
+      const p=f.properties;
+      const row=(a,b)=>`<div class="pp-row"><span>${a}</span><span>${b}</span></div>`;
+      l.bindPopup(
+        `<b>${p.spc_common||'Unknown species'}</b>`+
+        row('Est. age', p.age_est!=null?Math.round(p.age_est)+' yr':'—')+
+        row('DBH',p.tree_dbh!=null?p.tree_dbh+'"':'—')+
+        row('Planted',p.tree_dbh!=null?p.stump_diam||'—':'—')+
+        row('Block',p.block_id||'—')
+      );
+    }
+  }).addTo(map);
+  document.getElementById('status').textContent=
+    `${gj.features.length.toLocaleString()} trees loaded`;
+}
+
+// Auto-load if a trees GeoJSON sits next to this page
+fetch('trees.geojson')
+  .then(r=>{if(!r.ok)throw 0;return r.json();})
+  .then(loadTrees)
+  .catch(()=>{
+    document.getElementById('status').textContent=
+      'No trees.geojson found — run the data-prep script to generate it.';
+  });
+</script>
+</body>
+</html>

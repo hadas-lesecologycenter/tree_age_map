@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CB3 Street-Tree Age — Census Tracts</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--forest:#2D5F2B;--lime:#8CC63F;--sage:#A9BFA0;--cream:#F6F4EC;--ink:#1c2a1b;--grey:#c9ccc6}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:'Lexend',sans-serif;color:var(--ink)}
+#map{position:absolute;inset:0;background:var(--cream)}
+.panel{position:absolute;z-index:1000;background:rgba(255,255,255,.97);border:1px solid var(--sage);border-radius:14px;box-shadow:0 6px 24px rgba(45,95,43,.14)}
+#controls{top:14px;left:14px;width:258px;padding:16px}
+h1{font-family:'Poppins';font-weight:700;font-size:16px;margin:0 0 2px;color:var(--forest)}
+.sub{font-size:11px;color:#5a6a58;margin:0 0 13px}
+.lbl{font-family:'Poppins';font-weight:600;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--forest);margin:0 0 6px}
+.seg{display:flex;border:1px solid var(--sage);border-radius:9px;overflow:hidden}
+.seg button{flex:1;border:0;background:#fff;padding:7px 3px;font:500 10.5px 'Lexend';color:#46544a;cursor:pointer}
+.seg button.on{background:var(--forest);color:#fff}.seg button+button{border-left:1px solid var(--sage)}
+#legend{display:flex;gap:3px;margin-top:4px}#legend span{flex:1;height:12px;border-radius:2px}
+.ticks{display:flex;justify-content:space-between;font-size:10px;color:#5a6a58;margin-top:3px}
+.swatch{display:flex;align-items:center;gap:7px;font-size:11px;color:#5a6a58;margin-top:7px}
+.swatch i{width:12px;height:12px;border-radius:3px;background:var(--grey);border:1px solid #b4b8b0}
+#liveStat{font-size:10.5px;color:#5a6a58;margin-top:7px;line-height:1.45}
+.note{font-size:10px;line-height:1.45;color:#6b7869;border-top:1px dashed var(--sage);padding-top:9px;margin-top:11px}
+.navlinks{border-top:1px dashed var(--sage);padding-top:9px;margin-top:9px;display:flex;flex-direction:column;gap:4px}
+.navlinks a{font-size:10px;color:var(--forest);text-decoration:none}
+.navlinks a:hover{text-decoration:underline}
+#read{position:absolute;bottom:14px;left:14px;z-index:1000;padding:11px 13px;width:240px}
+#read b{font-family:'Poppins';color:var(--forest)}.rr{display:flex;justify-content:space-between;font-size:12px;margin:2px 0}
+.rr span:last-child{font-variant-numeric:tabular-nums;font-weight:500}
+#srcbadge{position:absolute;top:14px;right:14px;z-index:1000;padding:6px 11px;font:500 11px 'Lexend';color:#5a6a58}
+</style></head><body>
+<div id="map"></div>
+<div id="srcbadge" class="panel">CB3 · street trees · <span id="srcloading" style="color:#c9a227">loading…</span></div>
+<div id="controls" class="panel">
+<h1>CB3 Street-Tree Age</h1>
+<p class="sub">census tract granularity · LES / East Village</p>
+<p class="lbl">Color shows</p>
+<div class="seg" id="seg">
+  <button data-k="median_age" class="on">Median age</button>
+  <button data-k="pct_mature">% mature</button>
+  <button data-k="pct_old">% old</button>
+</div>
+<p class="lbl" style="margin-top:13px">Legend</p>
+<div id="legend"></div>
+<div class="ticks"><span id="lo">-</span><span id="hi">-</span></div>
+<div class="swatch"><i></i> too few trees (&lt;3)</div>
+<div id="liveStat">Loading census tract boundaries…</div>
+<p class="note">Community Board 3 (Lower East Side / East Village). 2020 census tract boundaries (63ge-mke6). Street trees from ForMS (hn5i-inap), filtered via Forestry Planting Spaces (82zj-84is) to “Street” type sites. Ages estimated via NYC species growth curves and recorded planting dates.</p>
+<div class="navlinks">
+  <a href="street-trees.html">← NYC street trees (NTA level)</a>
+  <a href="index.html">← All NYC neighborhoods</a>
+</div>
+</div>
+<div id="read" class="panel"><b id="rname">Hover a census tract</b><div id="rbody"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+var DATA=null;
+var CURVES={"american beech":[0.3333,0.0,24.9],"american elm":[0.44493,-0.008487,32.0],"american hornbeam":[0.35,0.0,3.0],"american linden":[0.50974,-0.010216,26.0],"amur maple":[0.41262,-0.011509,9.4],"black cherry":[0.06,0.0,30.4],"black locust":[0.3237,0.0,28.8],"black walnut":[0.3,0.0,8.8],"boxelder":[0.3,0.0,18.9],"bur oak":[0.1,0.0,3.0],"callery pear":[0.41473,-0.012165,13.0],"catalpa":[0.2016,0.0,29.8],"chinese elm":[0.3634,0.0,20.0],"dawn redwood":[0.6051,0.0,12.1],"eastern cottonwood":[0.4667,0.0,21.9],"eastern redbud":[0.4231,0.0,7.3],"eastern redcedar":[0.1875,0.0,25.3],"english oak":[0.4563,0.0,18.0],"european hornbeam":[0.364,0.0,9.4],"flowering dogwood":[0.1288,0.0,13.0],"ginkgo":[0.32454,-0.007514,18.0],"green ash":[0.44038,-0.006849,18.0],"hardy rubber tree":[0.2,0.0,3.0],"hedge maple":[0.37707,-0.008966,8.0],"honeylocust":[0.51618,-0.017586,16.0],"japanese maple":[0.30109,-0.010833,15.0],"japanese snowbell":[0.1,0.0,3.0],"japanese tree lilac":[0.2277,0.0,5.0],"japanese zelkova":[0.51426,-0.010941,16.0],"katsura tree":[0.4,0.0,8.1],"kentucky coffeetree":[0.4163,0.0,7.0],"kousa dogwood":[0.15,0.0,4.8],"littleleaf linden":[0.41853,-0.010391,21.0],"london planetree":[0.36235,-0.008857,34.0],"mimosa":[0.1,0.0,8.0],"mulberry":[0.31,0.0,31.6],"northern red oak":[0.46842,-0.007379,32.0],"norway maple":[0.30121,-0.00953,23.0],"norway spruce":[0.1857,0.0,24.5],"paper birch":[0.1,0.0,7.0],"pin oak":[0.49425,-0.008466,31.0],"red maple":[0.3851,-0.011187,23.0],"river birch":[0.6,0.0,7.8],"sassafras":[0.04,0.0,24.0],"sawtooth oak":[0.4141,0.0,10.0],"scarlet oak":[0.9,0.0,2.0],"shingle oak":[0.7,0.0,2.0],"siberian elm":[0.2333,0.0,34.2],"silver linden":[0.56838,-0.008719,13.0],"silver maple":[0.42664,-0.007911,35.0],"sugar maple":[0.2245,0.0,18.7],"swamp white oak":[0.4955,0.0,11.8],"sweetgum":[0.44571,-0.012513,24.0],"sycamore maple":[0.21794,-0.007094,19.1],"tree of heaven":[0.4611,0.0,24.1],"weeping willow":[0.1,0.0,9.0],"white ash":[0.4267,0.0,26.6],"white oak":[0.3754,0.0,33.8],"willow oak":[0.41408,-0.003271,27.0],"__overall__":[0.4171,-0.01023,30.0]};
+var BASE='https://data.cityofnewyork.us';
+var TRACTS_ID='63ge-mke6';
+var SPACES_ID='82zj-84is';
+var TREES_ID='hn5i-inap';
+var APP_TOKEN='';
+var NOWYEAR=new Date().getFullYear();
+
+// CB3 (LES + East Village, Manhattan) — generous bounds to include border tracts
+// [minLat, minLon, maxLat, maxLon]
+var BB=[40.700,-74.012,40.742,-73.952];
+
+var map=L.map('map').setView([40.7205,-73.981],14);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+
+var RAMP=['#eef6e3','#cfe8a8','#a9d66a','#79bb42','#4f8f33','#2D5F2B'];
+var state={metric:'median_age'},breaks=[],layer;
+var META={median_age:{u:' yr',lab:'Median age'},pct_mature:{u:'%',lab:'% mature (≥30 yr)'},pct_old:{u:'%',lab:'% old (≥60 yr)'}};
+
+var CAL=2.0,GF=0.05,GC=1.0,MAXAGE=150,SPCAP={'callery pear':80,'cherry':80,'japanese tree lilac':70};
+var lutCache={};
+function lutFor(name){if(lutCache[name])return lutCache[name];var c=CURVES[name]||CURVES['__overall__'];var a=c[0],b=c[1],hi=c[2];var cap=SPCAP[name]||MAXAGE;var cum=0,arr=[0];for(var d=0.25;d<=72.0001;d+=0.25){var dr=d<hi?d:hi;var g=a+b*dr;g=g<GF?GF:(g>GC?GC:g);if(d>CAL)cum+=0.25/g;arr.push(cum>cap?cap:cum);}lutCache[name]=arr;return arr;}
+function interpAge(dbh,arr){if(dbh<=0)return 0;var x=dbh/0.25;var i=Math.floor(x);if(i>=arr.length-1)return arr[arr.length-1];return arr[i]+(arr[i+1]-arr[i])*(x-i);}
+function commonName(gs){if(!gs)return '';var s=gs;var k=s.lastIndexOf(' - ');if(k>-1)s=s.substring(k+3);else{var i=s.lastIndexOf('('),j=s.lastIndexOf(')');if(i>-1&&j>i)s=s.substring(i+1,j);}return s.toLowerCase().trim();}
+function treeAge(dbh,gs,planted){if(planted){var y=parseInt(String(planted).substring(0,4),10);if(y>=1985&&y<=NOWYEAR)return NOWYEAR-y;}return interpAge(dbh,lutFor(commonName(gs)));}
+
+function qbreaks(){var s=DATA.features.map(function(f){return f.properties[state.metric];}).filter(function(v){return v!=null;}).sort(function(a,b){return a-b;});if(!s.length)return[0,0,0,0,0,0];function q(p){return s[Math.min(s.length-1,Math.floor(p*s.length))];}return[q(0),q(.2),q(.4),q(.6),q(.8),q(.95)];}
+function col(v){if(v==null)return '#c9ccc6';for(var i=breaks.length-1;i>=0;i--)if(v>=breaks[i])return RAMP[i];return RAMP[0];}
+function spar(p){return(p.n||0)<3||p[state.metric]==null;}
+function style(f){var p=f.properties;return{weight:1,color:'#888',fillColor:spar(p)?'#c9ccc6':col(p[state.metric]),fillOpacity:spar(p)?0.3:0.82};}
+
+function tractLabel(p){
+  var ct=p.CT2020||p.ct2020||p.TRACTCE20||p.tractce20||p.CTLABEL||p.ctlabel||'';
+  if(ct){var n=ct.replace(/^0+/,'');if(n.length>2)n=n.slice(0,-2)+'.'+n.slice(-2);return 'Tract '+n;}
+  var geo=p.GeoID||p.geoid||p.GEOID||'';
+  return geo?'Tract '+geo.slice(-6):'Census Tract';
+}
+function read(p){
+  var m=META[state.metric];var v=p[state.metric];
+  var show=v==null?'—':(state.metric==='median_age'?v+' yrs':v+'%');
+  document.getElementById('rname').textContent=tractLabel(p);
+  var ntaRow=(p.NTAName||p.ntaname)?'<div class=rr><span>neighborhood</span><span>'+(p.NTAName||p.ntaname)+'</span></div>':'';
+  document.getElementById('rbody').innerHTML=
+    '<div class=rr><span>'+m.lab+'</span><span>'+show+'</span></div>'+
+    '<div class=rr><span>street trees</span><span>'+(p.n||0).toLocaleString()+'</span></div>'+ntaRow;
+}
+function draw(){
+  if(layer)layer.remove();breaks=qbreaks();
+  layer=L.geoJSON(DATA,{style:style,onEachFeature:function(f,l){
+    l.on('mouseover',function(){l.setStyle({weight:2.5,color:'#2D5F2B'});read(f.properties);});
+    l.on('mouseout',function(){layer.resetStyle(l);});
+  }}).addTo(map);
+  var m=META[state.metric];
+  document.getElementById('lo').textContent=Math.round(breaks[0]||0)+m.u;
+  document.getElementById('hi').textContent=Math.round(breaks[5]||0)+m.u+'+';
+  var lg=document.getElementById('legend');lg.innerHTML='';
+  RAMP.forEach(function(c){var s=document.createElement('span');s.style.background=c;lg.appendChild(s);});
+}
+document.querySelectorAll('#seg button').forEach(function(b){b.onclick=function(){
+  document.querySelectorAll('#seg button').forEach(function(x){x.classList.remove('on');});
+  b.classList.add('on');state.metric=b.dataset.k;if(DATA)draw();
+};});
+
+function inRing(x,y,r){var i,j,c=false;for(i=0,j=r.length-1;i<r.length;j=i++){var xi=r[i][0],yi=r[i][1],xj=r[j][0],yj=r[j][1];if(((yi>y)!=(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;}
+function inFeature(x,y,f){var g=f.geometry,P=g.type==='Polygon'?[g.coordinates]:g.coordinates;for(var p=0;p<P.length;p++){if(inRing(x,y,P[p][0])){var hole=false;for(var h=1;h<P[p].length;h++)if(inRing(x,y,P[p][h])){hole=true;break;}if(!hole)return true;}}return false;}
+function tractIndexFor(x,y){for(var i=0;i<DATA.features.length;i++){var bb=DATA.features[i].properties._bbox;if(bb&&x>=bb[0]&&x<=bb[2]&&y>=bb[1]&&y<=bb[3]&&inFeature(x,y,DATA.features[i]))return i;}return -1;}
+
+function tok(u){return APP_TOKEN?u+(u.indexOf('?')>-1?'&':'?')+'$$app_token='+APP_TOKEN:u;}
+function fetchJSON(url,ms){var c=new AbortController();var t=setTimeout(function(){c.abort();},ms||90000);return fetch(url,{signal:c.signal}).then(function(r){clearTimeout(t);if(r.status===429)throw new Error('429');if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});}
+async function fetchRetry(url,tries){for(var a=0;a<(tries||3);a++){try{return await fetchJSON(tok(url),90000);}catch(e){if(a===(tries||3)-1)throw e;await new Promise(function(r){setTimeout(r,2000*(a+1));});}}} 
+function setStat(msg){document.getElementById('liveStat').innerHTML=msg;}
+function coords(row,geoField){var v=row[geoField];try{if(v&&v.coordinates)return v.coordinates;if(typeof v==='string'){if(v.charAt(0)==='{')return JSON.parse(v).coordinates;var m=v.match(/POINT\s*\(([-\d.]+)\s+([-\d.]+)\)/i);if(m)return[parseFloat(m[1]),parseFloat(m[2])];}}catch(e){}return null;}
+
+function bboxOfGeom(geom){
+  var x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  function scan(a,d){if(d===0){if(a[0]<x0)x0=a[0];if(a[0]>x1)x1=a[0];if(a[1]<y0)y0=a[1];if(a[1]>y1)y1=a[1];}else for(var i=0;i<a.length;i++)scan(a[i],d-1);}
+  scan(geom.coordinates,geom.type==='Polygon'?2:3);
+  return[x0,y0,x1,y1];
+}
+
+// within_box: top_left_lat, top_left_lon, bottom_right_lat, bottom_right_lon
+// BB=[minLat,minLon,maxLat,maxLon] → NW=(BB[2],BB[1]) SE=(BB[0],BB[3])
+function spBox(col){return 'within_box('+col+','+BB[2]+','+BB[1]+','+BB[0]+','+BB[3]+')';}
+
+async function fetchTractBoundaries(){
+  setStat('Loading CB3 census tract boundaries…');
+  var url=BASE+'/resource/'+TRACTS_ID+'.geojson?$where='+encodeURIComponent(spBox('the_geom'))+'&$limit=300';
+  var fc=await fetchRetry(url,3);
+  if(fc&&fc.features&&fc.features.length){
+    fc.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
+    return fc;
+  }
+  // fallback: fetch all NYC tracts, filter client-side
+  setStat('Fetching all NYC tracts (filtering client-side)…');
+  fc=await fetchRetry(BASE+'/resource/'+TRACTS_ID+'.geojson?$limit=3000',3);
+  if(fc&&fc.features){
+    fc.features=fc.features.filter(function(f){
+      var bb2=bboxOfGeom(f.geometry);
+      return bb2[0]<=BB[3]&&bb2[2]>=BB[1]&&bb2[1]<=BB[2]&&bb2[3]>=BB[0];
+    });
+    fc.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
+  }
+  return fc;
+}
+
+async function fetchStreetSpaceIds(){
+  setStat('Phase 1: sampling Planting Spaces…');
+  var sample=await fetchRetry(BASE+'/resource/'+SPACES_ID+'.json?$limit=1',3);
+  var keys=Object.keys((sample&&sample[0])||{});
+  var gidField=['globalid','global_id','plantingspaceglobalid'].find(function(k){return keys.includes(k);});
+  var siteField=['pssite','ps_site','sitetype','site_type','tptype'].find(function(k){return keys.includes(k);});
+  if(!gidField||!siteField){console.warn('82zj-84is field discovery failed; keys=',keys);return {ids:null};}
+
+  var streetWhere="lower("+siteField+") like '%street%'";
+  var spWhere=encodeURIComponent(streetWhere+' AND '+spBox('the_geom'));
+  var streetIds=new Set();
+  setStat('Phase 1: loading CB3 street planting spaces…');
+  var rows0;
+  try{rows0=await fetchRetry(BASE+'/resource/'+SPACES_ID+'.json?$select='+gidField+'&$where='+spWhere+'&$limit=50000',3);}
+  catch(e){rows0=null;}
+
+  if(rows0&&rows0.length>0){
+    for(var i=0;i<rows0.length;i++){var v=rows0[i][gidField];if(v)streetIds.add(String(v).toLowerCase());}
+    if(rows0.length===50000){
+      var off=50000,PAGE=50000;
+      while(true){
+        var more=await fetchRetry(BASE+'/resource/'+SPACES_ID+'.json?$select='+gidField+'&$where='+spWhere+'&$order=:id&$limit='+PAGE+'&$offset='+off,3);
+        if(!more||!more.length)break;
+        for(var j=0;j<more.length;j++){var v2=more[j][gidField];if(v2)streetIds.add(String(v2).toLowerCase());}
+        off+=PAGE;if(more.length<PAGE)break;
+      }
+    }
+    setStat('Phase 1: '+streetIds.size.toLocaleString()+' CB3 street spaces found.');
+    return {ids:streetIds};
+  }
+
+  // Spatial filter returned 0 or failed — city-wide fallback
+  setStat('Phase 1: loading all city street spaces (this may take a minute)…');
+  var offset=0,PAGE2=50000,cap=2000000;
+  var where=encodeURIComponent(streetWhere);
+  while(offset<cap){
+    var url=BASE+'/resource/'+SPACES_ID+'.json?$select='+gidField+'&$where='+where+'&$order=:id&$limit='+PAGE2+'&$offset='+offset;
+    var rows=await fetchRetry(url,3);
+    if(!rows||!rows.length)break;
+    for(var i2=0;i2<rows.length;i2++){var v3=rows[i2][gidField];if(v3)streetIds.add(String(v3).toLowerCase());}
+    offset+=PAGE2;
+    setStat('Phase 1: '+streetIds.size.toLocaleString()+' street spaces…');
+    if(rows.length<PAGE2)break;
+  }
+  return {ids:streetIds};
+}
+
+async function fetchStreetTrees(streetIds){
+  setStat('Phase 2: sampling tree dataset…');
+  var sample=await fetchRetry(BASE+'/resource/'+TREES_ID+'.json?$limit=1',3);
+  var keys=Object.keys((sample&&sample[0])||{});
+  var geoField=['location','the_geom','point','geom','geometry'].find(function(k){return keys.includes(k);})||'location';
+  var dateField=['planteddate','planted_date'].find(function(k){return keys.includes(k);})||null;
+  var psidField=['plantingspaceglobalid','planting_space_global_id','plantingspaceid'].find(function(k){return keys.includes(k);})||null;
+  var sel=geoField+',dbh,genusspecies'+(dateField?','+dateField:'')+(psidField?','+psidField:'');
+
+  var baseWhere="dbh > 0 AND dbh <= 60 AND tpstructure != 'Retired'";
+  var spWhere=baseWhere+' AND '+spBox(geoField);
+  var bins=DATA.features.map(function(){return [];});
+  var total=0,placed=0,streetCount=0,offset=0,PAGE=50000,cap=200000,useSp=true;
+  setStat('Phase 2: loading CB3 tree points…');
+  while(offset<cap){
+    var where=encodeURIComponent(useSp?spWhere:baseWhere);
+    var url=BASE+'/resource/'+TREES_ID+'.json?$select='+sel+'&$where='+where+'&$order=:id&$limit='+PAGE+'&$offset='+offset;
+    var rows;
+    try{rows=await fetchRetry(url,3);}catch(e){
+      if(useSp&&offset===0){useSp=false;continue;}
+      throw e;
+    }
+    if(!rows||!rows.length){if(useSp&&offset===0){useSp=false;continue;}break;}
+    for(var i=0;i<rows.length;i++){
+      var row=rows[i];total++;
+      if(streetIds&&psidField){var psid=row[psidField];if(!psid||!streetIds.has(String(psid).toLowerCase()))continue;}
+      streetCount++;
+      var c=coords(row,geoField);if(!c||isNaN(c[0])||isNaN(c[1]))continue;
+      var x=c[0],y=c[1];
+      if(!useSp&&(y<BB[0]||y>BB[2]||x<BB[1]||x>BB[3]))continue;
+      var age=treeAge(parseFloat(row.dbh),row.genusspecies,dateField?row[dateField]:null);
+      var idx=tractIndexFor(x,y);if(idx>-1){bins[idx].push(age);placed++;}
+    }
+    offset+=PAGE;
+    setStat('Phase 2: '+total.toLocaleString()+' scanned, '+streetCount.toLocaleString()+' street trees…');
+    if(rows.length<PAGE)break;
+  }
+  return {bins:bins,placed:placed,streetCount:streetCount,usedStreetFilter:!!streetIds};
+}
+
+async function loadData(){
+  try{
+    var fc=await fetchTractBoundaries();
+    if(!fc||!fc.features||!fc.features.length){
+      setStat('No census tracts found for CB3 area — check network access to data.cityofnewyork.us.');
+      return;
+    }
+    DATA=fc;
+    setStat(DATA.features.length+' census tracts loaded. Loading tree data…');
+    draw();
+
+    var phase1=await fetchStreetSpaceIds();
+    if(!phase1.ids)setStat('Could not identify street planting spaces — loading all CB3 trees.');
+
+    var phase2=await fetchStreetTrees(phase1.ids);
+
+    DATA.features.forEach(function(f,i){
+      var a=phase2.bins[i];
+      if(!a.length){f.properties.n=0;f.properties.median_age=null;f.properties.pct_mature=null;f.properties.pct_old=null;return;}
+      a.sort(function(x,y){return x-y;});
+      var med=a[Math.floor(a.length/2)],mat=0,old=0;
+      for(var j=0;j<a.length;j++){if(a[j]>=30)mat++;if(a[j]>=60)old++;}
+      f.properties.n=a.length;
+      f.properties.median_age=Math.round(med*10)/10;
+      f.properties.pct_mature=Math.round(mat/a.length*1000)/10;
+      f.properties.pct_old=Math.round(old/a.length*1000)/10;
+    });
+    draw();
+    var treeLabel=phase2.usedStreetFilter?phase2.streetCount.toLocaleString()+' street trees':phase2.placed.toLocaleString()+' trees';
+    document.getElementById('srcloading').outerHTML='<b style="color:#2D5F2B">'+treeLabel+'</b>';
+    setStat('<b style="color:#2D5F2B">'+phase2.placed.toLocaleString()+'</b> trees mapped across '+DATA.features.length+' census tracts in CB3.');
+  }catch(e){
+    var blocked=(e.name==='AbortError'||e.message==='429');
+    setStat(blocked?'Throttled — add a free NYC Open Data app token at the top of this file.':'Load failed: '+e.message+'.');
+    document.getElementById('srcloading').textContent='error';
+  }
+}
+loadData();
+</script></body></html>

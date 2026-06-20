@@ -69,11 +69,11 @@ var TREES_ID='hn5i-inap';
 var APP_TOKEN='';
 var NOWYEAR=new Date().getFullYear();
 
-// CB3 (LES + East Village, Manhattan) — generous bounds to include border tracts
+// CB3 (LES + East Village, Manhattan) — tight bounds, east wall at East River
 // [minLat, minLon, maxLat, maxLon]
-var BB=[40.700,-74.012,40.742,-73.952];
+var BB=[40.708,-73.996,40.736,-73.972];
 
-var map=L.map('map').setView([40.7205,-73.981],14);
+var map=L.map('map').setView([40.722,-73.984],14);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
 
 var RAMP=['#eef6e3','#cfe8a8','#a9d66a','#79bb42','#4f8f33','#2D5F2B'];
@@ -169,26 +169,47 @@ function bboxOfGeom(geom){
 // BB = [minLat, minLon, maxLat, maxLon]  → NW=(BB[2],BB[1])  SE=(BB[0],BB[3])
 function spBox(col){return 'within_box('+col+','+BB[2]+','+BB[1]+','+BB[0]+','+BB[3]+')';}
 
+function isManhattan(f){
+  var p=f.properties||f;
+  if(p.boro_code!==undefined)return String(p.boro_code)==='1';
+  if(p.borocode!==undefined)return String(p.borocode)==='1';
+  var bn=p.boro_name||p.boroname||'';if(bn)return bn.toLowerCase().indexOf('manhattan')>-1;
+  var geo=String(p.geoid||p.GEOID||'');if(geo.length>=5)return geo.slice(2,5)==='061';
+  var bct=String(p.boroct2020||'');if(bct)return bct.charAt(0)==='1';
+  return true;
+}
 async function fetchTractBoundaries(){
   setStat('Loading CB3 census tract boundaries…');
-  var url=BASE+'/resource/'+TRACTS_ID+'.geojson?$where='+encodeURIComponent(spBox('the_geom'))+'&$limit=300';
-  var fc=await fetchRetry(url,3);
-  if(fc&&fc.features&&fc.features.length){
-    fc.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
-    return fc;
+  // Try spatial + Manhattan borough filter
+  var spW=spBox('the_geom');
+  var url=BASE+'/resource/'+TRACTS_ID+'.geojson?$where='+encodeURIComponent(spW+" AND boro_code = '1'")+'&$limit=300';
+  try{
+    var fc=await fetchRetry(url,3);
+    if(fc&&fc.features&&fc.features.length){
+      fc.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
+      return fc;
+    }
+  }catch(e){}
+  // fallback: spatial only, then client-side Manhattan filter
+  setStat('Fetching CB3 tracts (spatial filter)…');
+  var fc2=await fetchRetry(BASE+'/resource/'+TRACTS_ID+'.geojson?$where='+encodeURIComponent(spW)+'&$limit=300',3);
+  if(fc2&&fc2.features&&fc2.features.length){
+    fc2.features=fc2.features.filter(isManhattan);
+    fc2.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
+    return fc2;
   }
-  // fallback: fetch all NYC tracts, filter client-side by bbox overlap
+  // full fallback: all NYC tracts, client-side bbox + borough filter
   setStat('Fetching all NYC tracts (filtering client-side)…');
-  fc=await fetchRetry(BASE+'/resource/'+TRACTS_ID+'.geojson?$limit=3000',3);
-  if(fc&&fc.features){
-    fc.features=fc.features.filter(function(f){
+  fc2=await fetchRetry(BASE+'/resource/'+TRACTS_ID+'.geojson?$limit=3000',3);
+  if(fc2&&fc2.features){
+    fc2.features=fc2.features.filter(function(f){
+      if(!isManhattan(f))return false;
       var bb2=bboxOfGeom(f.geometry);
-      // bbox overlap check (bb2 in lon/lat, BB in lat/lon)
       return bb2[0]<=BB[3]&&bb2[2]>=BB[1]&&bb2[1]<=BB[2]&&bb2[3]>=BB[0];
     });
-    fc.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
+    fc2.features.forEach(function(f){f.properties._bbox=bboxOfGeom(f.geometry);});
   }
-  return fc;
+  return fc2;
 }
 
 async function fetchStreetSpaceIds(){
